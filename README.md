@@ -1,3 +1,5 @@
+> **Endograph fork:** Published as `@endograph/sandbox-runtime`. Based on upstream 0.0.75 with the Linux nested writable mount fix from upstream PR #447. See [ENDOGRAPH_FORK.md](ENDOGRAPH_FORK.md) for provenance and scope.
+
 # Anthropic Sandbox Runtime (srt)
 
 A lightweight sandboxing tool for enforcing filesystem and network restrictions on arbitrary processes at the OS level, without requiring a container.

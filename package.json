@@ -1,7 +1,7 @@
 {
-  "name": "@anthropic-ai/sandbox-runtime",
-  "version": "0.0.75",
-  "description": "Anthropic Sandbox Runtime (ASRT) - A general-purpose tool for wrapping security boundaries around arbitrary processes",
+  "name": "@endograph/sandbox-runtime",
+  "version": "0.0.75-endograph.1",
+  "description": "Endograph fork of Anthropic Sandbox Runtime with the Linux nested writable mount fix",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -22,8 +22,9 @@
     "lint": "eslint 'src/**/*.ts' --fix --cache --cache-location=node_modules/.cache/.eslintcache",
     "lint:check": "eslint 'src/**/*.ts' --cache --cache-location=node_modules/.cache/.eslintcache",
     "format": "prettier --write 'src/**/*.ts' --cache --log-level warn",
-    "prepublishOnly": "npm run clean && npm run build",
-    "prepare": "husky"
+    "prepublishOnly": "bun run prepare:vendor && npm run clean && npm run build",
+    "prepare": "husky",
+    "prepare:vendor": "bun scripts/prepare-endograph-vendor.ts"
   },
   "dependencies": {
     "@pondwader/socks5-server": "^1.0.10",
@@ -56,7 +57,8 @@
     "vendor/srt-win",
     "vendor/java-proxy-agent",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "ENDOGRAPH_FORK.md"
   ],
   "keywords": [
     "sandbox",
@@ -73,12 +75,12 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anthropic-experimental/sandbox-runtime.git"
+    "url": "git+https://github.com/endograph/sandbox-runtime.git"
   },
   "bugs": {
-    "url": "https://github.com/anthropic-experimental/sandbox-runtime/issues"
+    "url": "https://github.com/endograph/sandbox-runtime/issues"
   },
-  "homepage": "https://github.com/anthropic-experimental/sandbox-runtime#readme",
+  "homepage": "https://github.com/endograph/sandbox-runtime#readme",
   "lint-staged": {
     "*.ts": [
       "eslint --fix --cache --cache-location=node_modules/.cache/.eslintcache",
