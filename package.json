@@ -1,6 +1,6 @@
 {
   "name": "@endograph/sandbox-runtime",
-  "version": "0.0.75-endograph.1",
+  "version": "0.0.75-endograph.2",
   "description": "Endograph fork of Anthropic Sandbox Runtime with the Linux nested writable mount fix",
   "type": "module",
   "main": "./dist/index.js",

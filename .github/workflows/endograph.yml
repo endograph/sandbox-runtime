@@ -28,6 +28,7 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: bun test test/sandbox/allow-read.test.ts test/sandbox/merged-usr.test.ts test/sandbox/symlinked-deny-paths.test.ts test/sandbox/readonly-deny-dir-stubs.test.ts test/sandbox/trailing-slash-deny-spellings.test.ts
+      - run: npm pack --pack-destination /tmp
       - uses: actions/checkout@v6
         with:
           repository: endograph/endograph
@@ -37,5 +38,5 @@ jobs:
         working-directory: endograph-integration
         run: |
           bun install --frozen-lockfile --ignore-scripts
-          bun add @endograph/sandbox-runtime@file:.. --ignore-scripts
+          bun add /tmp/endograph-sandbox-runtime-*.tgz --ignore-scripts
           bun test test/sandbox.test.ts test/host_cli.test.ts
