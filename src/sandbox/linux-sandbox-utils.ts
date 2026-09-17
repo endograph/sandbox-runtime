@@ -818,27 +818,28 @@ function buildSandboxCommand(
 }
 
 /**
- * bwrap cannot create a file bind mount point over a destination that is
- * itself a symlink — `--ro-bind /dev/null <symlink>` fails with "Can't create
- * file at <path>" and the whole command refuses to start. File read-deny
- * binds therefore target the symlink's resolved target instead: reads
- * through the symlink resolve to that target inside the mount namespace, so
- * the denied content stays covered. This matters for credential dotfiles
- * (~/.netrc, ~/.npmrc, …) that are commonly symlinks into a dotfile
- * manager's directory. Directory denies (`--tmpfs`) are left on the original
- * path: bwrap accepts those, and rewriting them would break allowRead
- * carve-outs expressed against the symlink path (e.g. /bin on usr-merged
- * systems).
+ * Patched bwrap rejects symlink mount destinations. Resolve every existing
+ * component for both policy comparisons and mount destinations. Missing paths
+ * keep their spelling; bwrap remains responsible for safely resolving mounts.
  */
 function resolveSymlinkDenyDest(normalizedPath: string): string {
-  try {
-    if (fs.lstatSync(normalizedPath).isSymbolicLink()) {
-      return fs.realpathSync(normalizedPath)
-    }
-  } catch {
-    // Dangling symlink or vanished path — keep the original.
-  }
-  return normalizedPath
+  return resolveSymlinkedDenyPath(normalizedPath) ?? normalizedPath
+}
+
+/**
+ * Keep root symlinks (e.g. /bin -> usr/bin) from the initial root bind.
+ * Their targets are covered by the real root children below. Masking an alias
+ * separately would either mount on a symlink or re-mask an allowed subtree.
+ * proc/dev/sys retain their existing special handling.
+ */
+function rootReadDenyPaths(): string[] {
+  const skip = new Set(['proc', 'dev', 'sys'])
+  return fs
+    .readdirSync('/')
+    .filter(
+      child => !skip.has(child) && !fs.lstatSync('/' + child).isSymbolicLink(),
+    )
+    .map(child => '/' + child)
 }
 
 /**
@@ -963,7 +964,7 @@ async function generateFilesystemArgs(
       // ('<dir>//') silently defeats. bwrap binds 'dir' and 'dir/'
       // identically, so normalizing the recorded spelling fixes every
       // consumer at once instead of per-predicate. ('/' itself is kept.)
-      const normalizedPath =
+      let normalizedPath =
         normalizePathForSandbox(pathPattern).replace(/\/+$/, '') || '/'
 
       logForDebugging(
@@ -1001,6 +1002,7 @@ async function generateFilesystemArgs(
           )
           continue
         }
+        normalizedPath = resolvedPath
       } catch {
         // realpathSync failed - path might not exist or be accessible, skip it
         logForDebugging(
@@ -1068,14 +1070,10 @@ async function generateFilesystemArgs(
       const prospectiveReadDenyTmpfsDirsBothForms: string[] = []
       if (readConfig) {
         const effectiveReadDenyPaths: string[] = []
-        const rootSkipForGuard = new Set(['proc', 'dev', 'sys'])
         for (const denyReadPattern of readConfig.denyOnly || []) {
           if (normalizePathForSandbox(denyReadPattern) === '/') {
             try {
-              for (const child of fs.readdirSync('/')) {
-                if (!rootSkipForGuard.has(child))
-                  effectiveReadDenyPaths.push('/' + child)
-              }
+              effectiveReadDenyPaths.push(...rootReadDenyPaths())
             } catch {
               // Unreadable root: contribute nothing. (The denyRead loop has
               // no catch and would abort the whole wrap, so an
@@ -1451,7 +1449,7 @@ async function generateFilesystemArgs(
   // skip, pushReadDenyDirMounts' re-bind checks) depend on that.
   const readDenyPaths: string[] = []
   const readAllowPaths = (readConfig?.allowWithinDeny || []).map(p =>
-    normalizePathForSandbox(p),
+    resolveSymlinkDenyDest(normalizePathForSandbox(p)),
   )
   // Files masked by --ro-bind <source> <dest> below. Map of dest → source
   // (/dev/null for read-deny, the sentinel fake for credential mask). Used
@@ -1469,12 +1467,9 @@ async function generateFilesystemArgs(
   // + re-bind logic applies. Skip /proc and /dev: they're remounted by the
   // caller after this function returns. Skip /sys: kernel interface, tmpfs
   // over it breaks tooling and the host /sys is already read-only via ro-bind.
-  const rootSkip = new Set(['proc', 'dev', 'sys'])
   for (const p of readConfig?.denyOnly || []) {
     if (normalizePathForSandbox(p) === '/') {
-      for (const child of fs.readdirSync('/')) {
-        if (!rootSkip.has(child)) readDenyPaths.push('/' + child)
-      }
+      readDenyPaths.push(...rootReadDenyPaths())
     } else {
       readDenyPaths.push(p)
     }
@@ -1493,9 +1488,13 @@ async function generateFilesystemArgs(
   // Normalize then sort shallow-first so tmpfs over ancestor dirs lands before
   // /dev/null masks on descendant files. Otherwise a file-deny listed before
   // a dir-deny in denyRead gets wiped when the ancestor tmpfs is applied.
-  const normalizedDenyPaths = readDenyPaths
-    .map(p => normalizePathForSandbox(p))
-    .sort((a, b) => a.split('/').length - b.split('/').length)
+  const normalizedDenyPaths = [
+    ...new Set(
+      readDenyPaths.map(p =>
+        resolveSymlinkDenyDest(normalizePathForSandbox(p)),
+      ),
+    ),
+  ].sort((a, b) => a.split('/').length - b.split('/').length)
 
   for (const normalizedPath of normalizedDenyPaths) {
     if (!fs.existsSync(normalizedPath)) {

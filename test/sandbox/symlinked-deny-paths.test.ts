@@ -163,7 +163,7 @@ describe.if(isLinux)('Symlinked deny paths (resolve-before-mask)', () => {
     const result = await wrap([join(claudeLink, 'commands')], [claudeLink])
     const resolved = join(DOTFILES, 'claude', 'commands')
 
-    expect(result).toContain(`--tmpfs ${claudeLink}`)
+    expect(result).toContain(`--tmpfs ${join(DOTFILES, 'claude')}`)
     expect(result).not.toContain(`--ro-bind ${resolved} ${resolved}`)
   })
 
