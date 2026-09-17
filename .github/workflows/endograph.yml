@@ -38,5 +38,13 @@ jobs:
         working-directory: endograph-integration
         run: |
           bun install --frozen-lockfile --ignore-scripts
-          bun add /tmp/endograph-sandbox-runtime-*.tgz --ignore-scripts
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const p = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            const tar = fs.readdirSync("/tmp").find(f => f.startsWith("endograph-sandbox-runtime-") && f.endsWith(".tgz"));
+            if (!tar) throw new Error("Runtime tarball missing");
+            p.dependencies["@endograph/sandbox-runtime"] = "/tmp/" + tar;
+            fs.writeFileSync("package.json", JSON.stringify(p));
+          '
+          bun install --ignore-scripts
           bun test test/sandbox.test.ts test/host_cli.test.ts
