@@ -819,8 +819,8 @@ function buildSandboxCommand(
 
 /**
  * Patched bwrap rejects symlink mount destinations. Resolve every existing
- * component for both policy comparisons and mount destinations. Missing paths
- * keep their spelling; bwrap remains responsible for safely resolving mounts.
+ * component for both policy comparisons and mount destinations. Missing suffixes
+ * retain their spelling; bwrap remains responsible for safely resolving mounts.
  */
 function resolveSymlinkDenyDest(normalizedPath: string): string {
   return resolveSymlinkedDenyPath(normalizedPath) ?? normalizedPath
@@ -1563,10 +1563,8 @@ async function generateFilesystemArgs(
   //   if an allowed write path at-or-under that tmpfs covers the dest, the
   //   denyRead loop re-bound it (the .git/hooks case) and the write-deny bind
   //   is still required on top.
-  // tmpfsDirs and allowedWritePaths hold unresolved paths while dest has been
-  // canonicalized, so each dest is tested under both spellings: they name the
-  // same inode after bwrap resolves the mount destinations, and a hit on
-  // either means the tmpfs really does cover this bind.
+  // Mount paths are canonical. Retain the raw-deny comparison as well for
+  // unresolved or missing deny destinations.
   const isHiddenByTmpfs = (dest: string): boolean =>
     tmpfsDirs.some(tmpfsDir => {
       const underTmpfs = dest === tmpfsDir || dest.startsWith(tmpfsDir + '/')

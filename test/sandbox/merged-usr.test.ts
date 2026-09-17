@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -27,19 +28,20 @@ describe.if(isLinux)('merged-/usr with restrictive reads', () => {
   })
   afterEach(() => rmSync(base, { recursive: true, force: true }))
 
-  async function run(command: string, extraDenies: string[] = []) {
+  async function run(
+    command: string,
+    extraDenies: string[] = [],
+    systemReads = ['/bin', '/sbin', '/usr', '/lib', '/lib64'],
+  ) {
     const wrapped = await wrapCommandWithSandboxLinux({
       command,
       needsNetworkRestriction: false,
       readConfig: {
         denyOnly: ['/', ...extraDenies],
         allowWithinDeny: [
-          '/bin',
-          '/sbin',
-          '/usr',
-          '/lib',
-          '/lib64',
+          ...systemReads,
           join(base, 'project'),
+          realpathSync(join(import.meta.dir, '../../vendor')),
         ],
       },
       writeConfig: {
@@ -59,13 +61,13 @@ describe.if(isLinux)('merged-/usr with restrictive reads', () => {
     const result = await run(`
       set -eu
       /bin/cat ${base}/project/visible
-      test "$(readlink /bin)" = "$(/usr/bin/readlink /bin)"
+      test "$(readlink /bin)" = ${JSON.stringify(readlinkSync('/bin'))}
       ! cat ${base}/private/secret
       ! cat ${base}/alias/secret
       ! sh -c 'echo bad > ${base}/project/visible'
       echo allowed > ${base}/project/state/ok
     `)
-    expect(result.status).toBe(0)
+    expect(result.status, result.stderr).toBe(0)
     expect(result.stdout.trim()).toBe('visible')
     expect(result.stderr).not.toContain("Can't mount")
     expect(readFileSync(join(base, 'project', 'state', 'ok'), 'utf8')).toBe(
@@ -74,6 +76,22 @@ describe.if(isLinux)('merged-/usr with restrictive reads', () => {
     expect(readFileSync(join(base, 'project', 'visible'), 'utf8')).toBe(
       'visible',
     )
+  })
+
+  it('allows system aliases without granting all of /usr', async () => {
+    const result = await run(
+      `
+      set -eu
+      /bin/cat ${base}/project/visible
+      ! ls /usr/share/doc/bash/copyright
+      ! cat ${base}/private/secret
+    `,
+      [],
+      ['/bin', '/sbin', '/lib', '/lib64'],
+    )
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.stdout.trim()).toBe('visible')
+    expect(result.stderr).not.toContain("Can't mount")
   })
 
   it('an explicit symlink directory deny hides the canonical target and alias', async () => {
@@ -90,7 +108,7 @@ describe.if(isLinux)('merged-/usr with restrictive reads', () => {
     `,
       [join(base, 'project', 'secret-alias')],
     )
-    expect(result.status).toBe(0)
+    expect(result.status, result.stderr).toBe(0)
     expect(result.stdout).not.toContain('private-token')
     expect(existsSync(join(base, 'project', 'state', 'ok'))).toBe(true)
   })
